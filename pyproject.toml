@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling>=1.30", "packaging>=24.0", "py7zr>=0.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vapoursynth-bifrost"
+version = "3.0"
+description = "Bifrost temporal derainbowing plugin for VapourSynth"
+readme = "readme.rst"
+requires-python = ">=3.9"
+authors = [{ name = "Bifrost contributors" }]
+dependencies = ["VapourSynth>=77"]
+
+[project.urls]
+"Source Code" = "https://github.com/dubhatervapoursynth/vapoursynth-bifrost"
+"Packaging Fork" = "https://github.com/RyougiKukoc/vapoursynth-bifrost"
+"Upstream Releases" = "https://github.com/dubhatervapoursynth/vapoursynth-bifrost/releases"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "Makefile.am",
+  "autogen.sh",
+  "configure.ac",
+  "hatch_build.py",
+  "pyproject.toml",
+  "readme.rst",
+  "src",
+]
+
+[tool.hatch.build.targets.wheel]
+include = ["vapoursynth/plugins"]
+artifacts = [
+  "vapoursynth/plugins/**/*.dll",
+  "vapoursynth/plugins/**/manifest.vs",
+]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
