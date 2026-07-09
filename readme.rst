@@ -93,7 +93,7 @@ pip install from this fork
 This fork can install the upstream Windows release DLL into VapourSynth's
 autoload plugin directory::
 
-   pip install "vapoursynth-bifrost @ git+https://github.com/RyougiKukoc/vapoursynth-bifrost.git"
+   pip install "vapoursynth-bifrost @ git+https://github.com/RyougiKukoc/vapoursynth-bifrost-vcs.git"
 
 The wheel build downloads and verifies the upstream ``Bifrost-3.0.7z`` release
 asset, selects the DLL matching the current Windows Python architecture, then
