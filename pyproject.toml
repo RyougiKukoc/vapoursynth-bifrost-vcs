@@ -13,7 +13,7 @@ dependencies = ["VapourSynth>=77"]
 
 [project.urls]
 "Source Code" = "https://github.com/dubhatervapoursynth/vapoursynth-bifrost"
-"Packaging Fork" = "https://github.com/RyougiKukoc/vapoursynth-bifrost"
+"Packaging Fork" = "https://github.com/RyougiKukoc/vapoursynth-bifrost-vcs"
 "Upstream Releases" = "https://github.com/dubhatervapoursynth/vapoursynth-bifrost/releases"
 
 [tool.hatch.build.targets.sdist]
