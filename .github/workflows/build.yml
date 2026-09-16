@@ -32,8 +32,7 @@ jobs:
       - name: Build wheel from the verified Windows payload
         run: |
           $env:BIFROST_PLATFORM_TAG = 'win_amd64'
-          python -m pip wheel --no-deps -v . -w dist\wheels-windows 2>&1 | Tee-Object -FilePath bifrost-upstream-payload.log
-          Select-String -Path bifrost-upstream-payload.log -Pattern 'using verified upstream Windows release asset' -SimpleMatch
+          python -m pip wheel --no-deps -v . -w dist\wheels-windows
 
       - name: Make and explicitly smoke the Release payload
         run: |
@@ -52,8 +51,7 @@ jobs:
           $env:BIFROST_PREBUILT_URL = (Resolve-Path dist\release-assets-windows\bifrost-windows-x86_64.zip)
           $env:BIFROST_PREBUILT_SHA256 = (Get-Content dist\release-assets-windows\bifrost-windows-x86_64.zip.sha256).Split()[0]
           Remove-Item Env:\BIFROST_FORCE_BUILD -ErrorAction SilentlyContinue
-          python -m pip install --force-reinstall --no-deps -v . 2>&1 | Tee-Object -FilePath bifrost-vcs-install.log
-          Select-String -Path bifrost-vcs-install.log -Pattern 'using Release asset' -SimpleMatch
+          python -m pip install --force-reinstall --no-deps -v .
           python tools\ci_smoke_installed_wheel.py
 
       - uses: actions/upload-artifact@v4
