@@ -29,31 +29,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "VapourSynth==79" build hatchling packaging py7zr
 
-      - name: Set up the native toolchain
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            autoconf
-            automake
-            libtool
-            make
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-pkgconf
-
-      - name: Build forced-native wheel
+      - name: Build wheel from the verified Windows payload
         run: |
-          $env:PATH = "C:\msys64\ucrt64\bin;C:\msys64\usr\bin;$env:PATH"
-          $env:MSYSTEM = 'UCRT64'
-          $env:MSYSTEM_PREFIX = 'C:\msys64\ucrt64'
-          $env:MSYS2_PATH_TYPE = 'inherit'
-          $env:CC = 'C:\msys64\ucrt64\bin\gcc.exe'
-          $env:BIFROST_FORCE_BUILD = '1'
           $env:BIFROST_PLATFORM_TAG = 'win_amd64'
-          $env:PKG_CONFIG_PATH = 'C:\unrelated-pkg-config-path'
-          & 'C:\msys64\usr\bin\bash.exe' -c 'export PATH=/ucrt64/bin:/usr/bin:$PATH; command -v autoreconf; command -v automake; command -v libtool; command -v gcc'
-          python -m pip wheel --no-deps -v . -w dist\wheels-windows
+          python -m pip wheel --no-deps -v . -w dist\wheels-windows 2>&1 | Tee-Object -FilePath bifrost-upstream-payload.log
+          Select-String -Path bifrost-upstream-payload.log -Pattern 'using verified upstream Windows release asset' -SimpleMatch
 
       - name: Make and explicitly smoke the Release payload
         run: |

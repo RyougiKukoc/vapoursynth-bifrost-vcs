@@ -58,3 +58,8 @@ checksum, and wheel assets. The tag workflow validates their exact inventory
 and downloads them again to compare SHA-256 values. After publication, run the
 documented remote VCS install in a fresh R79 container and retain the pip log
 showing `using Release asset`; that gate cannot be run before the tag exists.
+
+Windows retains its verified upstream `Bifrost-3.0.7z` payload while a matching
+fork Release is unavailable, then repackages that API4 DLL as the fork's
+Windows zip and wheel. Windows is not used as the source-fallback test host;
+Linux and macOS exercise the actual native Autotools fallback independently.
