@@ -45,10 +45,14 @@ jobs:
       - name: Build forced-native wheel
         run: |
           $env:PATH = "C:\msys64\ucrt64\bin;C:\msys64\usr\bin;$env:PATH"
+          $env:MSYSTEM = 'UCRT64'
+          $env:MSYSTEM_PREFIX = 'C:\msys64\ucrt64'
+          $env:MSYS2_PATH_TYPE = 'inherit'
           $env:CC = 'gcc'
           $env:BIFROST_FORCE_BUILD = '1'
           $env:BIFROST_PLATFORM_TAG = 'win_amd64'
           $env:PKG_CONFIG_PATH = 'C:\unrelated-pkg-config-path'
+          & 'C:\msys64\usr\bin\bash.exe' -lc 'command -v autoreconf; command -v automake; command -v libtool; command -v gcc'
           python -m pip wheel --no-deps -v . -w dist\wheels-windows
 
       - name: Make and explicitly smoke the Release payload

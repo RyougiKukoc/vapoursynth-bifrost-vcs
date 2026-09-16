@@ -310,12 +310,21 @@ def _stage_native_plugin(target_dir: Path) -> None:
         autogen = source_dir / "autogen.sh"
         autogen.write_bytes(autogen.read_bytes().replace(b"\r\n", b"\n"))
         env = _configure_build_env(temp_dir)
-        shell = shutil.which("sh")
+        shell = shutil.which("bash") if sys.platform == "win32" else shutil.which("sh")
+        shell = shell or shutil.which("sh")
         if shell is None:
             raise RuntimeError("native Bifrost build requires a POSIX sh (MSYS2 sh on Windows)")
-        _run([shell, "./autogen.sh"], source_dir, env)
-        _run([shell, "./configure"], source_dir, env)
-        _run(["make"], source_dir, env)
+        if sys.platform == "win32":
+            # A non-login MSYS shell launched from PowerShell can lose Autotools from PATH.
+            env.setdefault("MSYSTEM", "UCRT64")
+            env.setdefault("MSYS2_PATH_TYPE", "inherit")
+            _run([shell, "-lc", "./autogen.sh"], source_dir, env)
+            _run([shell, "-lc", "./configure"], source_dir, env)
+            _run([shell, "-lc", "make"], source_dir, env)
+        else:
+            _run([shell, "./autogen.sh"], source_dir, env)
+            _run([shell, "./configure"], source_dir, env)
+            _run(["make"], source_dir, env)
         plugin = _find_built_plugin(source_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(plugin, target_dir / (PLUGIN_NAME + _native_suffix()))
