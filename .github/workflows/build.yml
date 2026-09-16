@@ -1,0 +1,259 @@
+name: Build and release Bifrost
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x86_64:
+    name: Build Windows x86_64
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Python build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "VapourSynth==79" build hatchling packaging py7zr
+
+      - name: Set up the native toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            autoconf
+            automake
+            libtool
+            make
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+
+      - name: Build forced-native wheel
+        run: |
+          $env:PATH = "C:\msys64\ucrt64\bin;C:\msys64\usr\bin;$env:PATH"
+          $env:CC = 'gcc'
+          $env:BIFROST_FORCE_BUILD = '1'
+          $env:BIFROST_PLATFORM_TAG = 'win_amd64'
+          $env:PKG_CONFIG_PATH = 'C:\unrelated-pkg-config-path'
+          python -m pip wheel --no-deps -v . -w dist\wheels-windows
+
+      - name: Make and explicitly smoke the Release payload
+        run: |
+          python tools\ci_make_release_assets.py --wheel-dir dist\wheels-windows --out-dir dist\release-assets-windows --zip-name bifrost-windows-x86_64.zip
+          python tools\ci_smoke_package.py --artifact-zip dist\release-assets-windows\bifrost-windows-x86_64.zip --json
+
+      - name: Install and smoke the built wheel
+        run: |
+          $wheel = Get-ChildItem dist\release-assets-windows\*.whl | Select-Object -ExpandProperty FullName
+          python -m pip install --force-reinstall --no-deps $wheel
+          python tools\ci_smoke_installed_wheel.py
+
+      - name: Smoke source install using the Release payload
+        run: |
+          python -m pip uninstall -y vapoursynth-bifrost
+          $env:BIFROST_PREBUILT_URL = (Resolve-Path dist\release-assets-windows\bifrost-windows-x86_64.zip)
+          $env:BIFROST_PREBUILT_SHA256 = (Get-Content dist\release-assets-windows\bifrost-windows-x86_64.zip.sha256).Split()[0]
+          Remove-Item Env:\BIFROST_FORCE_BUILD -ErrorAction SilentlyContinue
+          python -m pip install --force-reinstall --no-deps -v . 2>&1 | Tee-Object -FilePath bifrost-vcs-install.log
+          Select-String -Path bifrost-vcs-install.log -Pattern 'using Release asset' -SimpleMatch
+          python tools\ci_smoke_installed_wheel.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bifrost-release-assets-windows
+          path: dist/release-assets-windows
+          if-no-files-found: error
+
+  linux-x86_64:
+    name: Build Linux x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build in the conservative manylinux image
+        shell: bash
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace quay.io/pypa/manylinux2014_x86_64 bash -lc '
+            set -exo pipefail
+            source /opt/rh/devtoolset-10/enable
+            set -u
+            py=/opt/python/cp313-cp313/bin/python
+            export PATH="/opt/python/cp313-cp313/bin:$PATH"
+            yum install -y autoconf automake libtool make pkgconfig unzip
+            "$py" -m pip install --upgrade pip
+            "$py" -m pip install build hatchling packaging py7zr
+            mkdir -p _deps/vapoursynth-wheel dist/wheels-linux
+            "$py" -m pip download --only-binary=:all: --no-deps --platform manylinux_2_27_x86_64 --implementation cp --python-version 313 --abi abi3 VapourSynth==79 -d _deps/vapoursynth-wheel
+            unzip -q _deps/vapoursynth-wheel/*.whl -d _deps/vapoursynth-wheel/extracted
+            export BIFROST_VAPOURSYNTH_ROOT=/workspace/_deps/vapoursynth-wheel/extracted/vapoursynth
+            export BIFROST_FORCE_BUILD=1
+            export BIFROST_PLATFORM_TAG=manylinux_2_27_x86_64
+            "$py" -m build --wheel --no-isolation --skip-dependency-check --outdir dist/wheels-linux
+            "$py" tools/ci_make_release_assets.py --wheel-dir dist/wheels-linux --out-dir dist/release-assets-linux --zip-name bifrost-linux-x86_64.zip
+            mkdir -p dist/abi
+            unzip -p dist/release-assets-linux/bifrost-linux-x86_64.zip bifrost/bifrost.so > dist/abi/bifrost.so
+            readelf --version-info dist/abi/bifrost.so | tee dist/abi/readelf-version-info.txt
+            "$py" -c "import re; text=open(\"dist/abi/readelf-version-info.txt\").read(); versions=[tuple(map(int, value.split('.'))) for value in re.findall(r'GLIBC_(\\d+\\.\\d+)', text)]; assert all(version <= (2, 27) for version in versions), versions"
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bifrost-release-assets-linux
+          path: dist/release-assets-linux
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bifrost-linux-abi-report
+          path: dist/abi/readelf-version-info.txt
+          if-no-files-found: error
+
+  linux-runtime-smoke:
+    name: Smoke Linux Release payload
+    needs: linux-x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bifrost-release-assets-linux
+          path: dist/release-assets-linux
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install runtime and native build tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool pkg-config
+          python -m pip install --upgrade pip "VapourSynth==79"
+
+      - name: Explicitly load the downloaded Linux Release zip
+        shell: bash
+        run: python tools/ci_smoke_package.py --artifact-zip dist/release-assets-linux/bifrost-linux-x86_64.zip --json
+
+      - name: Install and autoload the downloaded wheel
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --force-reinstall --no-deps dist/release-assets-linux/*.whl
+          python tools/ci_smoke_installed_wheel.py
+
+      - name: Run an ordinary isolated force-build fallback
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip uninstall -y vapoursynth-bifrost
+          BIFROST_FORCE_BUILD=1 PKG_CONFIG_PATH=/unrelated python -m pip install --force-reinstall --no-deps -v . 2>&1 | tee bifrost-force-build.log
+          grep -F 'Bifrost native build:' bifrost-force-build.log
+          python tools/ci_smoke_installed_wheel.py
+
+      - name: Install from source using the Release zip
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip uninstall -y vapoursynth-bifrost
+          BIFROST_PREBUILT_URL="$GITHUB_WORKSPACE/dist/release-assets-linux/bifrost-linux-x86_64.zip" BIFROST_PREBUILT_SHA256="$(cut -d' ' -f1 dist/release-assets-linux/bifrost-linux-x86_64.zip.sha256)" python -m pip install --force-reinstall --no-deps -v . 2>&1 | tee bifrost-release-loopback.log
+          grep -F 'using Release asset' bifrost-release-loopback.log
+          python tools/ci_smoke_installed_wheel.py
+
+  macos-native-fallback:
+    name: Smoke macOS no-asset native fallback
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies and build without a Release asset
+        shell: bash
+        run: |
+          set -euxo pipefail
+          brew install autoconf automake libtool pkg-config
+          python -m pip install --upgrade pip "VapourSynth==79"
+          PKG_CONFIG_PATH=/unrelated python -m pip wheel --no-deps -v . -w dist/wheels-macos
+          python tools/ci_make_release_assets.py --wheel-dir dist/wheels-macos --out-dir dist/macos-smoke --zip-name bifrost-macos-x86_64.zip
+          python tools/ci_smoke_package.py --artifact-zip dist/macos-smoke/bifrost-macos-x86_64.zip --json
+          python -m pip install --force-reinstall --no-deps dist/macos-smoke/*.whl
+          python tools/ci_smoke_installed_wheel.py
+
+  publish-release:
+    name: Publish coordinated Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows-x86_64, linux-runtime-smoke, macos-native-fallback]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bifrost-release-assets-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Check Release asset inventory
+        shell: bash
+        run: |
+          set -euxo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          expected=(
+            "bifrost-linux-x86_64.zip"
+            "bifrost-linux-x86_64.zip.sha256"
+            "bifrost-windows-x86_64.zip"
+            "bifrost-windows-x86_64.zip.sha256"
+            "vapoursynth_bifrost-${version}-py3-none-manylinux_2_27_x86_64.whl"
+            "vapoursynth_bifrost-${version}-py3-none-win_amd64.whl"
+          )
+          mapfile -t actual < <(find release-assets -maxdepth 1 -type f -printf '%f\n' | sort)
+          test "${#actual[@]}" -eq "${#expected[@]}"
+          for asset in "${expected[@]}"; do
+            test -f "release-assets/${asset}"
+          done
+          test "$(find release-assets -maxdepth 1 -name '*.whl' | wc -l)" -eq 2
+          sha256sum release-assets/*.zip release-assets/*.whl
+
+      - name: Publish all assets once both platform gates pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" release-assets/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" release-assets/* --title "$tag" --notes "Automated Release-backed Bifrost package for $tag." --repo "$GITHUB_REPOSITORY"
+          fi
+
+      - name: Download Release assets and verify their digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir downloaded-release
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir downloaded-release
+          diff -u <(find release-assets -maxdepth 1 -type f -printf '%f\n' | sort) <(find downloaded-release -maxdepth 1 -type f -printf '%f\n' | sort)
+          for asset in release-assets/*; do
+            name="$(basename "$asset")"
+            test "$(sha256sum "$asset" | cut -d' ' -f1)" = "$(sha256sum "downloaded-release/$name" | cut -d' ' -f1)"
+          done

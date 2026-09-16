@@ -1,15 +1,15 @@
 [build-system]
-requires = ["hatchling>=1.30", "packaging>=24.0", "py7zr>=0.21"]
+requires = ["hatchling>=1.30", "packaging>=24.0", "py7zr>=0.21", "VapourSynth==79"]
 build-backend = "hatchling.build"
 
 [project]
 name = "vapoursynth-bifrost"
-version = "3.0"
+version = "3.1"
 description = "Bifrost temporal derainbowing plugin for VapourSynth"
 readme = "readme.rst"
 requires-python = ">=3.9"
 authors = [{ name = "Bifrost contributors" }]
-dependencies = ["VapourSynth>=77"]
+dependencies = ["VapourSynth>=79"]
 
 [project.urls]
 "Source Code" = "https://github.com/dubhatervapoursynth/vapoursynth-bifrost"
@@ -31,6 +31,8 @@ include = [
 include = ["vapoursynth/plugins"]
 artifacts = [
   "vapoursynth/plugins/**/*.dll",
+  "vapoursynth/plugins/**/*.so",
+  "vapoursynth/plugins/**/*.dylib",
   "vapoursynth/plugins/**/manifest.vs",
 ]
 

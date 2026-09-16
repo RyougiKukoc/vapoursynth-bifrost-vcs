@@ -3,6 +3,7 @@
 *.lo
 *.so
 *.dll
+__pycache__/
 .libs
 Makefile
 Makefile.in

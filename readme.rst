@@ -90,15 +90,30 @@ DLLs for VapourSynth and for Avisynth 2.5.8+ can be found in the "releases" sect
 pip install from this fork
 ==========================
 
-This fork can install the upstream Windows release DLL into VapourSynth's
-autoload plugin directory::
+This fork installs a native Bifrost plugin into VapourSynth's autoload plugin
+directory::
 
    pip install "vapoursynth-bifrost @ git+https://github.com/RyougiKukoc/vapoursynth-bifrost-vcs.git"
 
-The wheel build downloads and verifies the upstream ``Bifrost-3.0.7z`` release
-asset, selects the DLL matching the current Windows Python architecture, then
-installs::
+On Windows x86_64 and Linux x86_64, the wheel build first downloads the
+platform-specific zip from this fork's matching ``v<project.version>`` Release
+and verifies its adjacent ``.sha256`` asset. Linux Release wheels target the
+VapourSynth R79 ``manylinux_2_27_x86_64`` baseline. The Windows path retains a
+verified upstream ``Bifrost-3.0.7z`` fallback when a matching fork Release is
+unavailable.
+
+On every platform without a matching Release zip, including macOS, the hook
+runs Bifrost's Autotools build locally. This needs a C compiler, Autotools,
+``make``, ``pkg-config``, and an API4 VapourSynth SDK. An isolated PEP 517
+build receives VapourSynth 79 as a build dependency. A local SDK directory can
+be selected with ``BIFROST_VAPOURSYNTH_ROOT``; it must be the installed
+``vapoursynth`` package directory. The hook prepends its pkg-config metadata
+to an existing ``PKG_CONFIG_PATH`` rather than replacing caller settings.
+
+Set ``BIFROST_FORCE_BUILD=1`` to bypass a Release payload and require the
+native fallback. For test or private mirrors, set both ``BIFROST_PREBUILT_URL``
+and ``BIFROST_PREBUILT_SHA256``. The installed layout is::
 
    vapoursynth/plugins/bifrost/
      manifest.vs
-     bifrost.dll
+     bifrost.dll | bifrost.so | bifrost.dylib
