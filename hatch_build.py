@@ -315,12 +315,13 @@ def _stage_native_plugin(target_dir: Path) -> None:
         if shell is None:
             raise RuntimeError("native Bifrost build requires a POSIX sh (MSYS2 sh on Windows)")
         if sys.platform == "win32":
-            # A non-login MSYS shell launched from PowerShell can lose Autotools from PATH.
+            # Keep the copied source as cwd; a login shell changes to HOME on MSYS2.
             env.setdefault("MSYSTEM", "UCRT64")
             env.setdefault("MSYS2_PATH_TYPE", "inherit")
-            _run([shell, "-lc", "./autogen.sh"], source_dir, env)
-            _run([shell, "-lc", "./configure"], source_dir, env)
-            _run([shell, "-lc", "make"], source_dir, env)
+            msys_command = "export PATH=/ucrt64/bin:/usr/bin:$PATH; "
+            _run([shell, "-c", msys_command + "./autogen.sh"], source_dir, env)
+            _run([shell, "-c", msys_command + "./configure"], source_dir, env)
+            _run([shell, "-c", msys_command + "make"], source_dir, env)
         else:
             _run([shell, "./autogen.sh"], source_dir, env)
             _run([shell, "./configure"], source_dir, env)

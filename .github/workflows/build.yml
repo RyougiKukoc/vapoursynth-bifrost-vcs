@@ -48,11 +48,11 @@ jobs:
           $env:MSYSTEM = 'UCRT64'
           $env:MSYSTEM_PREFIX = 'C:\msys64\ucrt64'
           $env:MSYS2_PATH_TYPE = 'inherit'
-          $env:CC = 'gcc'
+          $env:CC = 'C:\msys64\ucrt64\bin\gcc.exe'
           $env:BIFROST_FORCE_BUILD = '1'
           $env:BIFROST_PLATFORM_TAG = 'win_amd64'
           $env:PKG_CONFIG_PATH = 'C:\unrelated-pkg-config-path'
-          & 'C:\msys64\usr\bin\bash.exe' -lc 'command -v autoreconf; command -v automake; command -v libtool; command -v gcc'
+          & 'C:\msys64\usr\bin\bash.exe' -c 'export PATH=/ucrt64/bin:/usr/bin:$PATH; command -v autoreconf; command -v automake; command -v libtool; command -v gcc'
           python -m pip wheel --no-deps -v . -w dist\wheels-windows
 
       - name: Make and explicitly smoke the Release payload
@@ -111,7 +111,7 @@ jobs:
             mkdir -p dist/abi
             unzip -p dist/release-assets-linux/bifrost-linux-x86_64.zip bifrost/bifrost.so > dist/abi/bifrost.so
             readelf --version-info dist/abi/bifrost.so | tee dist/abi/readelf-version-info.txt
-            "$py" -c "import re; text=open(\"dist/abi/readelf-version-info.txt\").read(); versions=[tuple(map(int, value.split('.'))) for value in re.findall(r'GLIBC_(\\d+\\.\\d+)', text)]; assert all(version <= (2, 27) for version in versions), versions"
+            "$py" -c "import re; text=open(\"dist/abi/readelf-version-info.txt\").read(); versions=[tuple(map(int, value.split(\".\"))) for value in re.findall(\"GLIBC_([0-9]+[.][0-9]+)\", text)]; assert all(version <= (2, 27) for version in versions), versions"
           '
 
       - uses: actions/upload-artifact@v4
