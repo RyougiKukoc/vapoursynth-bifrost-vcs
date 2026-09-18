@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.30", "packaging>=24.0", "py7zr>=0.21", "VapourSynth==79"]
+requires = ["hatchling>=1.30", "packaging>=24.0", "py7zr>=0.21", "VapourSynth>=79"]
 build-backend = "hatchling.build"
 
 [project]
